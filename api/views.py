@@ -1,31 +1,32 @@
-from django.shortcuts import render
 from django.contrib.auth import authenticate, login
-from ninja import NinjaAPI, Schema
+from ninja import NinjaAPI
 from ninja.security import django_auth
 from ninja.pagination import paginate
 from . import models, schemas
 import datetime
 
-api = NinjaAPI(csrf=True)
+api = NinjaAPI()
 
 @api.post("/api/v1/auth/register")
-def register_user(request, payload: schemas.LoginSchema):
+def register_user(request, payload: schemas.RegistrationSchema):
     if models.User.objects.filter(username=payload.username).exists():
-        return 400, {"error": "Username already exists"}
+        return {"error": "Username already exists"}
+    if models.Organization.objects.get(id=payload.organization_id) is None:
+        return {"error": "No such organization"}
     user = models.User.objects.create_user(username=payload.username, password=payload.password)
     user.save()
-    return 201, {"success": True}
+    return {"success": True}
 
 @api.post("/api/v1/auth/login")
 def login_user(request, payload: schemas.LoginSchema):
     user = authenticate(request, username=payload.username, password=payload.password)
     if user is not None:
         login(request, user)
-        return 200, {"success": True}
+        return {"success": True}
     else:
-        return 401, {"error": "Invalid credentials"}
+        return {"error": "Invalid credentials"}
 
-@api.get("/api/v1/tasks/", auth=django_auth)
+@api.get("/api/v1/tasks/", auth=django_auth, response=list[schemas.TaskSchema])
 @paginate
 def list_tasks(request):
     user = request.user
@@ -49,13 +50,13 @@ def create_task(request, payload: schemas.TaskCreateSchema):
             created_at = datetime.datetime.now())
         
         task.save()
-        return 201, {"success": True}
+        return {"success": True}
     except Exception as e:
-        return 400, {"error": e}
+        return {"error": e}
     
 @api.put("/api/v1/tasks/", auth=django_auth)
 def update_task(request, payload: schemas.TaskCreateSchema):
     task = models.Task.objects.get(id=payload.id)
     
     if task is None:
-        return 400, {"error": "Task does not exist"}
+        return {"error": "Task does not exist"}
