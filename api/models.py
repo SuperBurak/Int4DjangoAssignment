@@ -36,6 +36,8 @@ class Organization(models.Model):
     
 class User(AbstractUser):
     organization = models.OneToOneField(Organization, on_delete=models.CASCADE)
+    
+    objects = CustomUserManager()
 
     def __str__(self):
         return self.username

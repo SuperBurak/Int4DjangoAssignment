@@ -9,8 +9,8 @@ import datetime
 
 api = NinjaAPI()
 
-@api.post("/api/v1/auth/login")
-def login_user(request, payload: schemas.LoginSchema):
+@api.post("auth/login")
+def login_user(request, payload: schemas.UserSchema):
     user = authenticate(request, username=payload.username, password=payload.password)
     if user is not None:
         login(request, user)
@@ -18,16 +18,16 @@ def login_user(request, payload: schemas.LoginSchema):
     else:
         return {"error": "Invalid credentials"}
 
-@api.get("/api/v1/tasks/", auth=django_auth, response=list[models.Task])
+@api.get("tasks/", auth=django_auth, response=list[models.Task])
 @paginate
 @login_required
 def list_tasks(request):
     return models.Task.objects.filter(organization=request.user.organization).order_by(models.Task.deadline_datetime_with_tz, models.Task.priority)
 
 
-@api.post("/api/v1/tasks/", auth=django_auth)
+@api.post("tasks/", auth=django_auth)
 @login_required
-def create_task(request, payload: schemas.TaskCreateSchema):
+def create_task(request, payload: schemas.TaskSchema):
     if request.user.organization != payload.assigned_to.organization:
         return 401, {"error": "User does not belong to your organization"}
     
@@ -47,45 +47,43 @@ def create_task(request, payload: schemas.TaskCreateSchema):
     except Exception as e:
         return {"error": e}
     
-@api.put("/api/v1/tasks/{task_id}", auth=django_auth)
+@api.put("tasks/{task_id}", auth=django_auth)
 @login_required
-def update_task(request, task_id: int, payload: schemas.TaskUpdateSchema):
+def update_task(request, task_id: int, payload: schemas.TaskSchema):
+    task = get_object_or_404(models.Task, id=task_id)
+    
     if request.user.organization != payload.assigned_to.organization:
         return 401, {"error": "User does not belong to your organization"}
     
-    task = get_object_or_404(models.Task, id=task_id)
+    updated_fields = payload.dict(exclude_unset=True)
     
-    task.title = payload.title
-    task.description = payload.description
-    task.completed = payload.completed
-    task.deadline_datetime_with_tz = payload.deadline_datetime_with_tz
-    task.priority = payload.priority
-    task.assigned_to = payload.assigned_to
+    for attr, value in updated_fields.items():
+        setattr(task, attr, value)
     
     task.save()
 
     return {"success": True, "task_id": task.id}
     
-@api.delete("/api/v1/tasks/{task_id}", auth=django_auth)
+@api.delete("tasks/{task_id}", auth=django_auth)
 @login_required
 def delete_task(request, task_id: int):
-    if request.user.organization != payload.assigned_to.organization:
-        return 401, {"error": "User does not belong to your organization"}
-    
     task = get_object_or_404(models.Task, id=task_id)
+    
+    if request.user.organization != task.assigned_to.organization:
+        return 401, {"error": "User does not belong to your organization"}
     
     task.delete()
     
     return {"success": True, "task_id": task.id}
 
-@api.get("api/v1/users/", auth=django_auth, response=list[schemas.UserSchema])
+@api.get("users/", auth=django_auth, response=list[schemas.UserSchema])
 @login_required
 def get_users(request):
     return models.User.objects.filter(organization=request.user.organization)
         
-@api.post("/api/v1/users/", auth=django_auth)
+@api.post("users/", auth=django_auth)
 @login_required
-def register_user(request, payload: schemas.RegistrationSchema):
+def register_user(request, payload: schemas.UserSchema):
     if models.User.objects.filter(username=payload.username).exists():
         return {"error": "Username already exists"}
     if models.Organization.objects.get(id=payload.organization_id) is None:

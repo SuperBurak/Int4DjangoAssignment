@@ -1,42 +1,24 @@
 from pydantic import BaseModel
 from ninja import ModelSchema
 from datetime import datetime
-from . import models
+from .models import User, Task, Organization
 
-class LoginSchema(BaseModel):
-    username: str
-    password: str
+class OrganizationSchema(ModelSchema):
+    class Meta:
+        model = Organization
+        fields = ['id', 'name']
 
-class RegistrationSchema(BaseModel):
-    username: str
-    password: str
-    organization_id: int
+class UserSchema(ModelSchema):
+    organization: OrganizationSchema
     
-class TaskCreateSchema(BaseModel):
-    title: str
-    description: str
-    completed: bool
-    deadline_datetime_with_tz: datetime
-    priority: int
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'organization']
+        
+class TaskSchema(ModelSchema):
+    assigned_to: UserSchema
+    organization: OrganizationSchema
     
-class TaskUpdateSchema(BaseModel):
-    title: str
-    description: str
-    completed: bool
-    deadline_datetime_with_tz: datetime
-    priority: int
-    assigned_to: str
-    
-# class TaskSchema(BaseModel):
-#     id: int
-#     title: str
-#     description: str
-#     completed: bool
-#     assigned_to: str
-#     organization: str
-#     created_at: datetime
-#     deadline_datetime_with_tz: datetime
-#     priority: int
-
-class UserSchema(BaseModel):
-    username: str
+    class Meta:
+        model = Task
+        fields = ['id', 'title', 'description', 'completed', 'assigned_to', 'organization', 'created_at', 'deadline_datetime_with_tz', 'priority']
