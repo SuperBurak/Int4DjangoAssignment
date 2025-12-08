@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from ninja import ModelSchema
 from datetime import datetime
 from . import models
 
@@ -19,20 +20,23 @@ class TaskCreateSchema(BaseModel):
     priority: int
     
 class TaskUpdateSchema(BaseModel):
-    id: int
     title: str
     description: str
     completed: bool
     deadline_datetime_with_tz: datetime
     priority: int
-    
-class TaskSchema(BaseModel):
-    id: int
-    title: str
-    description: str
-    completed: bool
     assigned_to: str
-    organization: str
-    created_at: datetime
-    deadline_datetime_with_tz: datetime
-    priority: int
+    
+# class TaskSchema(BaseModel):
+#     id: int
+#     title: str
+#     description: str
+#     completed: bool
+#     assigned_to: str
+#     organization: str
+#     created_at: datetime
+#     deadline_datetime_with_tz: datetime
+#     priority: int
+
+class UserSchema(BaseModel):
+    username: str
