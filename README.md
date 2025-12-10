@@ -71,6 +71,16 @@ python manage.py runserver
 #### API will be available at http://localhost:8000/api/v1/
 #### OpenAPI documentation at http://localhost:8000/api/v1/docs
 
+#### Users (usernames) in seeded DB
+- janusz
+- grazyna
+- pawel
+- zygmunt
+- andrzej
+- szymon
+
+#### Password is: 'password123' for all
+
 ## Running tests
 
 ### Run all:

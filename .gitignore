@@ -3,3 +3,4 @@ htmlcov/
 .coverage
 api/__pycache__/
 core/__pycache__/
+.env.prod
