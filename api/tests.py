@@ -110,7 +110,7 @@ class TaskAPITests(TestCase):
             priority=1
         )
         
-        self.client = Client()  # Changed: Use Django's Client instead of Ninja's TestClient
+        self.client = Client()
         
         exp = timezone.now() + timedelta(hours=8)
         self.token1 = jwt.encode(
@@ -131,7 +131,6 @@ class TaskAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        # Handle both paginated and non-paginated responses
         results = data.get('items', data) if isinstance(data, dict) else data
         if isinstance(results, dict):
             results = results.get('results', [])
@@ -314,7 +313,7 @@ class UserAPITests(TestCase):
             password="pass123",
             organization=self.org
         )
-        self.client = Client()  # Changed: Use Django's Client instead of Ninja's TestClient
+        self.client = Client()
         
         exp = timezone.now() + timedelta(hours=8)
         self.token = jwt.encode(
@@ -330,8 +329,8 @@ class UserAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        # Handle both paginated and non-paginated responses
-        users = data.get('results', data) if isinstance(data, dict) else data
+        # in case pagination is added
+        users = data.get('items', data) if isinstance(data, dict) else data
         if isinstance(users, dict):
             users = users.get('results', [])
         self.assertGreater(len(users), 0)
@@ -547,12 +546,12 @@ class UserModelTests(TestCase):
             )
     
     def test_multiple_users_in_organization(self):
-        user1 = User.objects.create_user(
+        User.objects.create_user(
             username="user1",
             password="pass123",
             organization=self.org
         )
-        user2 = User.objects.create_user(
+        User.objects.create_user(
             username="user2",
             password="pass123",
             organization=self.org
@@ -637,7 +636,7 @@ class TaskModelTests(TestCase):
     
     def test_multiple_tasks_in_organization(self):
         deadline = timezone.now() + timedelta(days=7)
-        task1 = models.Task.objects.create(
+        models.Task.objects.create(
             title="Task 1",
             description="Description 1",
             completed=False,
@@ -646,7 +645,7 @@ class TaskModelTests(TestCase):
             deadline_datetime_with_tz=deadline,
             priority=0
         )
-        task2 = models.Task.objects.create(
+        models.Task.objects.create(
             title="Task 2",
             description="Description 2",
             completed=False,
