@@ -4,3 +4,5 @@ htmlcov/
 api/__pycache__/
 core/__pycache__/
 .env.prod
+api/__pycache__/
+core/__pycache__/
