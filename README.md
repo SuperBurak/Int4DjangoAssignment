@@ -1,6 +1,6 @@
 # Multi-Tenant Task Management API
 
-A Django REST API built with Django Ninja demonstrating multi-tenancy with complete data isolation between organizations. Features JWT authentication, automatic OpenAPI documentation, and comprehensive test coverage.
+A Django REST API built with Django Ninja demonstrating multi-tenancy with data isolation between organizations. 
 
 ## Features
 
@@ -93,7 +93,7 @@ coverage report -m
 - middleware.py - JWT decoding and organization context setting
 - models.py - Custom managers with automatic tenant filtering
 - auth.py - Ninja authentication handler
-- schemas.py - Pydantic models for request/response validation
+- schemas.py - Models for request/response validation
 
 ### Tests:
 - test_multi_tenancy - Verifies users from different orgs see only their data
