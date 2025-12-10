@@ -1,13 +1,11 @@
-from django.contrib.auth import authenticate, login
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from ninja import NinjaAPI
-from ninja.security import django_auth
 from ninja.pagination import paginate
 from . import models, schemas
 from .auth import JWTAuth
-from .permissions import OrganizationPermission
+from .tenant import get_current_organization
 from datetime import datetime, timedelta, timezone
 import jwt
 
@@ -22,23 +20,19 @@ def token_obtain(request, payload: schemas.LoginSchema):
         return 401, {"message": "Invalid credentials"}
 
     exp = datetime.now(timezone.utc) + timedelta(hours=8)
-    token = jwt.encode({"user_id": user.id, "exp": exp},
-                       settings.SECRET_KEY, algorithm="HS256")
+    payload = {"user_id": user.id, "exp": int(exp.timestamp())}
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
     return 200, {"token": token, "expires": exp.isoformat()}
 
 
-@api.get("tasks/", auth=JWTAuth(), response=list[schemas.TaskSchema])
+@api.get("tasks", auth=JWTAuth(), response=list[schemas.TaskSchema])
 @paginate
 def get_tasks(request):
-    return models.Task.objects.filter(organization=request.organization).order_by("deadline_datetime_with_tz", "priority")
+    return models.Task.objects.select_related('assigned_to', 'organization').all()
 
-
-@api.post("tasks/", auth=JWTAuth(), response={200: schemas.TaskCreatedSchema, 400: schemas.MessageSchema, 403: schemas.MessageSchema})
+@api.post("tasks", auth=JWTAuth(), response={200: schemas.TaskCreatedSchema, 400: schemas.MessageSchema})
 def create_task(request, payload: schemas.TaskInputSchema):
-    if not OrganizationPermission.is_assigned_to_in_user_organization(request, payload.assigned_to):
-        return 403, {"message": "Assigned user does not belong to your organization"}
-
     try:
         task = models.Task.objects.create(
             title=payload.title,
@@ -47,22 +41,17 @@ def create_task(request, payload: schemas.TaskInputSchema):
             deadline_datetime_with_tz=payload.deadline_datetime_with_tz,
             priority=payload.priority,
             assigned_to_id=payload.assigned_to,
-            organization=request.organization)
+            organization_id=request.user.organization.id)
 
-        task.save()
+        # task.save()
         return 200, {"task_id": task.id}
     except Exception as e:
-        return 400, {"message": e}
+        return 400, {"message": str(e)}
 
 
-@api.put("tasks/{task_id}", auth=JWTAuth(), response={200: schemas.TaskCreatedSchema, 403: schemas.MessageSchema})
+@api.put("tasks/{task_id}", auth=JWTAuth(), response={200: schemas.TaskCreatedSchema, 400: schemas.MessageSchema})
 def update_task(request, task_id: int, payload: schemas.TaskInputSchema):
-    task = get_object_or_404(models.Task, id=task_id,
-                             organization=request.organization)
-
-    if payload.assigned_to and not OrganizationPermission.is_assigned_to_in_user_organization(request, payload.assigned_to):
-        return 403, {"message": "Assigned user does not belong to your organization"}
-
+    task = get_object_or_404(models.Task, id=task_id)
     
     task.title=payload.title
     task.description=payload.description
@@ -71,15 +60,15 @@ def update_task(request, task_id: int, payload: schemas.TaskInputSchema):
     task.priority=payload.priority
     task.assigned_to_id=payload.assigned_to
 
-    task.save()
-
-    return 200, {"task_id": task.id}
-
+    try: 
+        task.save()
+        return 200, {"task_id": task.id}
+    except Exception as e:
+        return 400, {"message": str(e)}
 
 @api.delete("tasks/{task_id}", auth=JWTAuth(), response={200: schemas.MessageSchema})
 def delete_task(request, task_id: int):
-    task = get_object_or_404(models.Task, id=task_id,
-                             organization=request.organization)
+    task = get_object_or_404(models.Task, id=task_id)
     task.delete()
 
     return 200, {"message": "Task deleted"}
@@ -87,7 +76,7 @@ def delete_task(request, task_id: int):
 
 @api.get("users/", auth=JWTAuth(), response=list[schemas.UserSchema])
 def get_users(request):
-    return models.User.objects.filter(organization=request.organization)
+    return models.User.objects.all()
 
 
 @api.post("users/", auth=JWTAuth(), response={200: schemas.UserCreatedSchema, 400: schemas.MessageSchema})
@@ -99,7 +88,7 @@ def create_user(request, payload: schemas.LoginSchema):
         user = models.User.objects.create_user(
             username=payload.username,
             password=payload.password,
-            organization=request.organization
+            organization=get_current_organization()
         )
         return 200, {"user_id": user.id}
     except Exception as e:

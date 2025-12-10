@@ -55,20 +55,20 @@ class JWTAuthenticationTests(TestCase):
             algorithm="HS256"
         )
         response = self.client.get(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             HTTP_AUTHORIZATION=f"Bearer {expired_token}"
         )
         self.assertEqual(response.status_code, 401)
     
     def test_malformed_token(self):
         response = self.client.get(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             HTTP_AUTHORIZATION="Bearer malformed.token.here"
         )
         self.assertEqual(response.status_code, 401)
     
     def test_missing_authorization_header(self):
-        response = self.client.get("/api/v1/tasks/")
+        response = self.client.get("/api/v1/tasks")
         self.assertEqual(response.status_code, 401)
 
 
@@ -126,38 +126,34 @@ class TaskAPITests(TestCase):
     
     def test_list_tasks_with_auth(self):
         response = self.client.get(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             HTTP_AUTHORIZATION=f"Bearer {self.token1}"
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
         # Handle both paginated and non-paginated responses
-        results = data.get('results', data) if isinstance(data, dict) else data
+        results = data.get('items', data) if isinstance(data, dict) else data
         if isinstance(results, dict):
             results = results.get('results', [])
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['title'], "Task 1")
     
     def test_list_tasks_without_auth(self):
-        response = self.client.get("/api/v1/tasks/")
+        response = self.client.get("/api/v1/tasks")
         self.assertEqual(response.status_code, 401)
     
-    def test_multi_tenancy_isolation(self):
+    def test_multi_tenancy(self):
         response1 = self.client.get(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             HTTP_AUTHORIZATION=f"Bearer {self.token1}"
         )
         response2 = self.client.get(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             HTTP_AUTHORIZATION=f"Bearer {self.token2}"
         )
         
-        data1 = response1.json()
-        data2 = response2.json()
-        
-        # Handle pagination wrapper
-        results1 = data1.get('results', data1) if isinstance(data1, dict) else data1
-        results2 = data2.get('results', data2) if isinstance(data2, dict) else data2
+        results1 = response1.json()['items']
+        results2 = response2.json()['items']
         
         self.assertEqual(len(results1), 1)
         self.assertEqual(results1[0]['id'], self.task1.id)
@@ -167,7 +163,7 @@ class TaskAPITests(TestCase):
     
     def test_create_task(self):
         response = self.client.post(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             data=json.dumps({
                 "title": "New Task",
                 "description": "New Description",
@@ -182,9 +178,8 @@ class TaskAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
     
     def test_create_task_with_user_from_different_org(self):
-        """Test task creation fails with user from different organization"""
         response = self.client.post(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             data=json.dumps({
                 "title": "New Task",
                 "description": "New Description",
@@ -196,12 +191,11 @@ class TaskAPITests(TestCase):
             content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {self.token1}"
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 400)
     
     def test_create_task_without_auth(self):
-        """Test task creation fails without authentication"""
         response = self.client.post(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             data=json.dumps({
                 "title": "New Task",
                 "description": "New Description",
@@ -259,18 +253,61 @@ class TaskAPITests(TestCase):
         self.assertFalse(models.Task.objects.filter(id=task_id).exists())
     
     def test_delete_task_from_different_org(self):
-        """Test deleting task fails for user from different organization"""
         response = self.client.delete(
             f"/api/v1/tasks/{self.task1.id}",
             HTTP_AUTHORIZATION=f"Bearer {self.token2}"
         )
         self.assertEqual(response.status_code, 404)
         self.assertTrue(models.Task.objects.filter(id=self.task1.id).exists())
+        
+    def test_pagination(self):
+        models.Task.objects.bulk_create([
+            models.Task(
+                title="bulk1",
+                description="pagination",
+                completed=False,
+                assigned_to=self.user1,
+                organization=self.org1,
+                deadline_datetime_with_tz=self.deadline,
+                priority=0),
+            models.Task(
+                title="bulk2",
+                description="pagination",
+                completed=False,
+                assigned_to=self.user1,
+                organization=self.org1,
+                deadline_datetime_with_tz=self.deadline,
+                priority=0),
+            models.Task(
+                title="bulk3",
+                description="pagination",
+                completed=False,
+                assigned_to=self.user1,
+                organization=self.org1,
+                deadline_datetime_with_tz=self.deadline,
+                priority=0),
+            models.Task(
+                title="bulk4",
+                description="pagination",
+                completed=False,
+                assigned_to=self.user1,
+                organization=self.org1,
+                deadline_datetime_with_tz=self.deadline,
+                priority=0),
+        ])
+        
+        response = self.client.get(
+            "/api/v1/tasks?limit=2&offset=0",
+            HTTP_AUTHORIZATION=f"Bearer {self.token1}"
+        )
+        
+        data = response.json()
+        
+        self.assertEqual(len(data['items']), 2) 
+        self.assertEqual(data['count'], 5)
 
 
-class UserAPITests(TestCase):
-    """Test User API endpoints"""
-    
+class UserAPITests(TestCase):    
     def setUp(self):
         self.org = models.Organization.objects.create(name="Test Org")
         self.user = User.objects.create_user(
@@ -331,6 +368,22 @@ class UserAPITests(TestCase):
             content_type="application/json"
         )
         self.assertEqual(response.status_code, 401)
+        
+    def test_user_list_is_tenant_isolated(self):
+        org2 = models.Organization.objects.create(name="B")
+        u2 = User.objects.create_user(username="u2", password="p", organization=org2)
+        token2 = jwt.encode({"user_id": u2.id, "exp": int((timezone.now()+timedelta(hours=8)).timestamp())}, settings.SECRET_KEY, algorithm="HS256")
+        response1 = self.client.get(
+            "/api/v1/users/", 
+            HTTP_AUTHORIZATION=f"Bearer {self.token}")
+        response2 = self.client.get(
+            "/api/v1/users/", 
+            HTTP_AUTHORIZATION=f"Bearer {token2}")
+        data1 = response1.json()
+        data2 = response2.json()
+        
+        self.assertTrue(all(u['organization']['id'] == self.org.id for u in data1))
+        self.assertTrue(all(u['organization']['id'] == org2.id for u in data2))
 
 
 class SchemaValidationTests(TestCase):
@@ -353,7 +406,7 @@ class SchemaValidationTests(TestCase):
     def test_invalid_task_schema_missing_title(self):
         deadline = timezone.now() + timedelta(days=7)
         response = self.client.post(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             data=json.dumps({
                 "description": "Description",
                 "completed": False,
@@ -369,7 +422,7 @@ class SchemaValidationTests(TestCase):
     def test_invalid_task_schema_invalid_priority(self):
         deadline = timezone.now() + timedelta(days=7)
         response = self.client.post(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             data=json.dumps({
                 "title": "Task",
                 "description": "Description",
@@ -394,7 +447,7 @@ class SchemaValidationTests(TestCase):
     def test_valid_task_schema(self):
         deadline = timezone.now() + timedelta(days=7)
         response = self.client.post(
-            "/api/v1/tasks/",
+            "/api/v1/tasks",
             data=json.dumps({
                 "title": "Valid Task",
                 "description": "Valid Description",
@@ -501,7 +554,7 @@ class UserModelTests(TestCase):
             password="testpass123",
             organization=self.org
         )
-        self.assertEqual(str(user), "testuser")
+        self.assertEqual(str(user), "testuser (Test Org)")
 
 
 class TaskModelTests(TestCase):

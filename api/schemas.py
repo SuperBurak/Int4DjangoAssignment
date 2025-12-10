@@ -15,10 +15,9 @@ class UserSchema(ModelSchema):
         model = User
         fields = ['id', 'username', 'organization']
         
-class LoginSchema(ModelSchema):
-    class Meta:
-        model = User
-        fields = ['username', 'password']
+class LoginSchema(Schema):
+    username: str
+    password: str
         
 class TaskSchema(ModelSchema):
     assigned_to: UserSchema
