@@ -5,5 +5,5 @@ api/__pycache__/
 core/__pycache__/
 api/management/__pycache__/
 api/migrations/__pycache__/
-.env.prod
+db.sqlite3
 
